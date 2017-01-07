@@ -15,7 +15,7 @@ from homeassistant.components.media_player import (
     SUPPORT_TURN_OFF, SUPPORT_TURN_ON, SUPPORT_VOLUME_MUTE, SUPPORT_VOLUME_SET,
     SUPPORT_STOP, MediaPlayerDevice, PLATFORM_SCHEMA)
 from homeassistant.const import (
-    CONF_HOST, STATE_IDLE, STATE_OFF, STATE_PAUSED, STATE_PLAYING,
+    CONF_HOST, CONF_NAME, STATE_IDLE, STATE_OFF, STATE_PAUSED, STATE_PLAYING,
     STATE_UNKNOWN)
 import homeassistant.helpers.config_validation as cv
 import homeassistant.util.dt as dt_util
@@ -53,6 +53,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
         _LOGGER.error('CEC config "%s" must be a list.', CONF_IGNORE_CEC)
 
     hosts = []
+    name = None
 
     if discovery_info and discovery_info in KNOWN_HOSTS:
         return
@@ -62,6 +63,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 
     elif CONF_HOST in config:
         hosts = [(config.get(CONF_HOST), DEFAULT_PORT)]
+        name = config.get(CONF_NAME)
 
     else:
         hosts = [tuple(dev[:2]) for dev in pychromecast.discover_chromecasts()
@@ -78,14 +80,14 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
                  if (device.host, device.port) == host]
         if found:
             try:
-                casts.append(CastDevice(found[0]))
+                casts.append(CastDevice(found[0], name))
                 KNOWN_HOSTS.append(host)
             except pychromecast.ChromecastConnectionError:
                 pass
         else:
             try:
                 # add the device anyway, get_chromecasts couldn't find it
-                casts.append(CastDevice(pychromecast.Chromecast(*host)))
+                casts.append(CastDevice(pychromecast.Chromecast(*host), name))
                 KNOWN_HOSTS.append(host)
             except pychromecast.ChromecastConnectionError:
                 pass
@@ -96,9 +98,10 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 class CastDevice(MediaPlayerDevice):
     """Representation of a Cast device on the network."""
 
-    def __init__(self, chromecast):
+    def __init__(self, chromecast, name):
         """Initialize the Cast device."""
         self.cast = chromecast
+        self._name = name or chromecast.device.friendly_name
 
         self.cast.socket_client.receiver_controller.register_status_listener(
             self)
@@ -116,7 +119,7 @@ class CastDevice(MediaPlayerDevice):
     @property
     def name(self):
         """Return the name of the device."""
-        return self.cast.device.friendly_name
+        return self._name
 
     # MediaPlayerDevice properties and methods
     @property
